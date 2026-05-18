@@ -128,3 +128,265 @@ spec:
           value: order-execution-api
         - name: "SyncPolicy"
           value: "Manual - requires approval"
+
+---
+# ApplicationSet for risk-engine on DEV (automated sync + self-heal)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: risk-engine-dev
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: eks-dev
+            url: "https://eks-dev-server"
+            env: dev
+            replicaCount: "1"
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  template:
+    metadata:
+      name: "risk-engine-dev"
+      namespace: argocd
+      labels:
+        app: risk-engine
+        env: dev
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/secant78/multi-cluster-gitops.git
+        targetRevision: HEAD
+        path: helm/risk-engine
+        helm:
+          releaseName: risk-engine
+          valueFiles:
+            - values/values-dev.yaml
+          parameters:
+            - name: replicaCount
+              value: "{{ .replicaCount }}"
+      destination:
+        name: "{{ .cluster }}"
+        namespace: risk-engine
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - ApplyOutOfSyncOnly=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+      info:
+        - name: "Environment"
+          value: dev
+        - name: "Chart"
+          value: risk-engine
+
+---
+# ApplicationSet for risk-engine on PROD (manual sync + market-hours sync window)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: risk-engine-prod
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: eks-prod
+            url: "https://eks-prod-server"
+            env: prod
+            replicaCount: "2"
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  template:
+    metadata:
+      name: "risk-engine-prod"
+      namespace: argocd
+      labels:
+        app: risk-engine
+        env: prod
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/secant78/multi-cluster-gitops.git
+        targetRevision: HEAD
+        path: helm/risk-engine
+        helm:
+          releaseName: risk-engine
+          valueFiles:
+            - values/values-prod.yaml
+          parameters:
+            - name: replicaCount
+              value: "{{ .replicaCount }}"
+      destination:
+        name: "{{ .cluster }}"
+        namespace: risk-engine
+      # NO automated sync for prod — manual approval required
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - ApplyOutOfSyncOnly=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m
+      # Sync Window: DENY deployments during NYSE market hours
+      # Mon-Fri 09:30-16:00 ET = 14:30-21:00 UTC
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas  # Ignore HPA-managed replica counts
+      info:
+        - name: "Environment"
+          value: prod
+        - name: "Chart"
+          value: risk-engine
+        - name: "SyncPolicy"
+          value: "Manual - requires approval"
+
+---
+# ApplicationSet for trade-settlement on DEV (automated sync + self-heal)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: trade-settlement-dev
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: eks-dev
+            url: "https://eks-dev-server"
+            env: dev
+            replicaCount: "1"
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  template:
+    metadata:
+      name: "trade-settlement-dev"
+      namespace: argocd
+      labels:
+        app: trade-settlement
+        env: dev
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/secant78/multi-cluster-gitops.git
+        targetRevision: HEAD
+        path: helm/trade-settlement
+        helm:
+          releaseName: trade-settlement
+          valueFiles:
+            - values/values-dev.yaml
+          parameters:
+            - name: replicaCount
+              value: "{{ .replicaCount }}"
+      destination:
+        name: "{{ .cluster }}"
+        namespace: trade-settlement
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - ApplyOutOfSyncOnly=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+      info:
+        - name: "Environment"
+          value: dev
+        - name: "Chart"
+          value: trade-settlement
+
+---
+# ApplicationSet for trade-settlement on PROD (manual sync + market-hours sync window)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: trade-settlement-prod
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: eks-prod
+            url: "https://eks-prod-server"
+            env: prod
+            replicaCount: "2"
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  template:
+    metadata:
+      name: "trade-settlement-prod"
+      namespace: argocd
+      labels:
+        app: trade-settlement
+        env: prod
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/secant78/multi-cluster-gitops.git
+        targetRevision: HEAD
+        path: helm/trade-settlement
+        helm:
+          releaseName: trade-settlement
+          valueFiles:
+            - values/values-prod.yaml
+          parameters:
+            - name: replicaCount
+              value: "{{ .replicaCount }}"
+      destination:
+        name: "{{ .cluster }}"
+        namespace: trade-settlement
+      # NO automated sync for prod — manual approval required
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - ApplyOutOfSyncOnly=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m
+      # Sync Window: DENY deployments during NYSE market hours
+      # Mon-Fri 09:30-16:00 ET = 14:30-21:00 UTC
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas  # Ignore HPA-managed replica counts
+      info:
+        - name: "Environment"
+          value: prod
+        - name: "Chart"
+          value: trade-settlement
+        - name: "SyncPolicy"
+          value: "Manual - requires approval"

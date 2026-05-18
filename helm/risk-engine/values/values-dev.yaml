@@ -1,0 +1,23 @@
+replicaCount: 1
+
+image:
+  tag: latest
+
+resources:
+  requests:
+    cpu: 150m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+
+env:
+  LOG_LEVEL: "debug"
+  APP_ENV: "development"
+  APP_VERSION: "1.0.0"
+
+# No anti-affinity in dev (fewer nodes)
+affinity: {}
