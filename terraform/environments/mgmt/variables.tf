@@ -7,5 +7,5 @@ variable "aws_region" {
 variable "environment" {
   description = "Environment name"
   type        = string
-  default     = "mgmt"
+  default     = "mgmt"  # Hub cluster stays in us-east-1
 }
