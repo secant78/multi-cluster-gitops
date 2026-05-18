@@ -1,0 +1,15 @@
+apiVersion: v2
+name: market-data-service
+description: Mock Market Data Service for Mini-Nasdaq GitOps Platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - nasdaq
+  - market-data
+  - trading
+  - fintech
+home: https://github.com/YOUR_ORG/mini-nasdaq-gitops
+maintainers:
+  - name: Platform Engineering
+    email: platform@example.com

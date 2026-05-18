@@ -1,0 +1,25 @@
+replicaCount: 1
+
+image:
+  tag: latest
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+
+env:
+  LOG_LEVEL: "debug"
+  APP_ENV: "development"
+  APP_VERSION: "1.0.0"
+  # Updated by scripts/setup-lattice.sh with actual Lattice DNS
+  MARKET_DATA_URL: "http://<lattice-dev-dns>/api/v1/market-data"
+
+# No anti-affinity in dev (fewer nodes)
+affinity: {}

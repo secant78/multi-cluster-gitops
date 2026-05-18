@@ -1,0 +1,49 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: error-rate-check
+  namespace: order-api
+spec:
+  args:
+    - name: service-name
+      value: order-execution-api
+  metrics:
+    - name: error-rate
+      interval: 30s
+      # Fail the analysis after 3 consecutive failures
+      failureLimit: 3
+      # Success condition: error rate < 5%
+      successCondition: result[0] < 0.05
+      provider:
+        prometheus:
+          address: http://prometheus-server.monitoring.svc.cluster.local:80
+          query: |
+            sum(rate(http_requests_total{app="{{args.service-name}}",status=~"5.."}[2m]))
+            /
+            sum(rate(http_requests_total{app="{{args.service-name}}"}[2m]))
+
+    - name: p99-latency
+      interval: 30s
+      failureLimit: 3
+      # Success condition: p99 latency < 500ms
+      successCondition: result[0] < 0.5
+      provider:
+        prometheus:
+          address: http://prometheus-server.monitoring.svc.cluster.local:80
+          query: |
+            histogram_quantile(0.99,
+              sum(rate(http_request_duration_seconds_bucket{app="{{args.service-name}}"}[2m])) by (le)
+            )
+
+    - name: success-rate
+      interval: 30s
+      failureLimit: 3
+      # Success condition: success rate > 95%
+      successCondition: result[0] > 0.95
+      provider:
+        prometheus:
+          address: http://prometheus-server.monitoring.svc.cluster.local:80
+          query: |
+            sum(rate(http_requests_total{app="{{args.service-name}}",status=~"2.."}[2m]))
+            /
+            sum(rate(http_requests_total{app="{{args.service-name}}"}[2m]))

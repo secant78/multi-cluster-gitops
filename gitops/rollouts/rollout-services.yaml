@@ -1,0 +1,46 @@
+---
+# Stable service - receives traffic from stable pods
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-execution-api-stable
+  namespace: order-api
+  labels:
+    app: order-execution-api
+    role: stable
+    app.kubernetes.io/name: order-execution-api
+    app.kubernetes.io/part-of: mini-nasdaq-gitops
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  # Selector is managed by Argo Rollouts controller
+  # It adds rollouts-pod-template-hash to distinguish stable/canary
+  selector:
+    app: order-execution-api
+
+---
+# Canary service - receives traffic from canary pods only
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-execution-api-canary
+  namespace: order-api
+  labels:
+    app: order-execution-api
+    role: canary
+    app.kubernetes.io/name: order-execution-api
+    app.kubernetes.io/part-of: mini-nasdaq-gitops
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  # Selector is managed by Argo Rollouts controller
+  selector:
+    app: order-execution-api

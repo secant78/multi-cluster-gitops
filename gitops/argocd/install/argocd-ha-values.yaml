@@ -1,0 +1,153 @@
+# ArgoCD HA Helm Values for Mini-Nasdaq GitOps Platform
+# Deploy with: helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace -f argocd-ha-values.yaml
+
+global:
+  # Target the management cluster nodes
+  nodeSelector:
+    role: worker
+
+# Redis HA using redis-ha sub-chart
+redis-ha:
+  enabled: true
+  redis:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+# Application Controller - sharded for multi-cluster scalability
+controller:
+  replicas: 2
+  env:
+    - name: ARGOCD_CONTROLLER_SHARDING_ALGORITHM
+      value: consistent-hashing
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false  # set true when Prometheus is installed
+
+# ArgoCD Server
+server:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  service:
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+  extraArgs:
+    - --insecure  # TLS terminated at LB; remove for production with cert-manager
+
+# Repo Server
+repoServer:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+
+# ApplicationSet Controller
+applicationSet:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+
+# DEX (SSO) - disabled for demo simplicity
+dex:
+  enabled: false
+
+# ArgoCD configuration
+configs:
+  params:
+    # Allow insecure HTTP for demo (remove in production)
+    server.insecure: true
+    # Increase app sync concurrency for multi-cluster
+    application.namespaces: "argocd,order-api,market-data,argo-rollouts,monitoring"
+    # Sharding algorithm for multi-cluster controller
+    controller.sharding.algorithm: consistent-hashing
+
+  # RBAC configuration
+  rbac:
+    policy.default: role:readonly
+    policy.csv: |
+      p, role:cluster-admin, applications, *, */*, allow
+      p, role:cluster-admin, clusters, *, *, allow
+      p, role:cluster-admin, repositories, *, *, allow
+      p, role:cluster-admin, projects, *, *, allow
+      p, role:cluster-admin, exec, *, */*, allow
+      g, argocd-admins, role:cluster-admin
+
+  # Custom ArgoCD configuration
+  cm:
+    # Enable status badge
+    statusbadge.enabled: "true"
+    # Resource tracking method
+    application.resourceTrackingMethod: annotation
+    # Helm configuration
+    helm.enabled: "true"
+    # Timeout for sync operations
+    timeout.reconciliation: 180s
+    # Enable impersonation for multi-tenant
+    application.sync.impersonation.enabled: "false"
+    resource.customizations.health.argoproj.io_Rollout: |
+      hs = {}
+      if obj.status ~= nil then
+        if obj.status.phase == "Degraded" then
+          hs.status = "Degraded"
+          hs.message = obj.status.message
+          return hs
+        end
+        if obj.status.phase == "Paused" then
+          hs.status = "Suspended"
+          hs.message = "Rollout is paused"
+          return hs
+        end
+        if obj.status.phase == "Progressing" then
+          hs.status = "Progressing"
+          hs.message = "Rollout is progressing"
+          return hs
+        end
+        if obj.status.phase == "Healthy" then
+          hs.status = "Healthy"
+          return hs
+        end
+      end
+      hs.status = "Progressing"
+      hs.message = "Waiting for rollout"
+      return hs

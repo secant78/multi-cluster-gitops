@@ -1,0 +1,135 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: order-execution-api
+  namespace: order-api
+  labels:
+    app: order-execution-api
+    app.kubernetes.io/name: order-execution-api
+    app.kubernetes.io/part-of: mini-nasdaq-gitops
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: order-execution-api
+  strategy:
+    canary:
+      # Stable and canary services for traffic splitting
+      stableService: order-execution-api-stable
+      canaryService: order-execution-api-canary
+      # Canary rollout steps
+      steps:
+        # Step 1: Route 10% traffic to canary
+        - setWeight: 10
+        # Step 2: Wait 60s and observe metrics
+        - pause:
+            duration: 60s
+        # Step 3: Increase to 30%
+        - setWeight: 30
+        # Step 4: Wait 60s
+        - pause:
+            duration: 60s
+        # Step 5: Run automated analysis (error rate check)
+        - analysis:
+            templates:
+              - templateName: error-rate-check
+            args:
+              - name: service-name
+                value: order-execution-api
+        # Step 6: Increase to 60%
+        - setWeight: 60
+        # Step 7: Final wait before full promotion
+        - pause:
+            duration: 60s
+        # Step 8: Full rollout
+        - setWeight: 100
+      # Anti-affinity for canary pods
+      antiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          weight: 1
+  template:
+    metadata:
+      labels:
+        app: order-execution-api
+        app.kubernetes.io/name: order-execution-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: order-execution-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: order-execution-api
+          image: ghcr.io/YOUR_ORG/order-execution-api:stable
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: MARKET_DATA_URL
+              value: "http://market-data-service/api/v1/market-data"
+            - name: LOG_LEVEL
+              value: "warn"
+            - name: APP_ENV
+              value: "production"
+            - name: APP_VERSION
+              value: "1.0.0"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - order-execution-api
+              topologyKey: kubernetes.io/hostname

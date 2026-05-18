@@ -1,0 +1,130 @@
+---
+# ApplicationSet for order-execution-api on DEV (automated sync + self-heal)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: order-execution-api-dev
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: eks-dev
+            url: "https://eks-dev-server"  # ArgoCD resolves by cluster name
+            env: dev
+            replicaCount: "1"
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  template:
+    metadata:
+      name: "order-execution-api-dev"
+      namespace: argocd
+      labels:
+        app: order-execution-api
+        env: dev
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/YOUR_ORG/mini-nasdaq-gitops.git
+        targetRevision: HEAD
+        path: helm/order-execution-api
+        helm:
+          releaseName: order-execution-api
+          valueFiles:
+            - values/values-dev.yaml
+          parameters:
+            - name: replicaCount
+              value: "{{ .replicaCount }}"
+      destination:
+        name: "{{ .cluster }}"
+        namespace: order-api
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - ApplyOutOfSyncOnly=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+      info:
+        - name: "Environment"
+          value: dev
+        - name: "Chart"
+          value: order-execution-api
+
+---
+# ApplicationSet for order-execution-api on PROD (manual sync + market-hours sync window)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: order-execution-api-prod
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: eks-prod
+            url: "https://eks-prod-server"  # ArgoCD resolves by cluster name
+            env: prod
+            replicaCount: "3"
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  template:
+    metadata:
+      name: "order-execution-api-prod"
+      namespace: argocd
+      labels:
+        app: order-execution-api
+        env: prod
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/YOUR_ORG/mini-nasdaq-gitops.git
+        targetRevision: HEAD
+        path: helm/order-execution-api
+        helm:
+          releaseName: order-execution-api
+          valueFiles:
+            - values/values-prod.yaml
+          parameters:
+            - name: replicaCount
+              value: "{{ .replicaCount }}"
+      destination:
+        name: "{{ .cluster }}"
+        namespace: order-api
+      # NO automated sync for prod — manual approval required
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - ApplyOutOfSyncOnly=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m
+      # Sync Window: DENY deployments during NYSE market hours
+      # Mon-Fri 09:30-16:00 ET = 14:30-21:00 UTC
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas  # Ignore HPA-managed replica counts
+      info:
+        - name: "Environment"
+          value: prod
+        - name: "Chart"
+          value: order-execution-api
+        - name: "SyncPolicy"
+          value: "Manual - requires approval"
