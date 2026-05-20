@@ -8,22 +8,21 @@ global:
 
 # Redis HA using redis-ha sub-chart
 redis-ha:
+  enabled: false
+
+redis:
   enabled: true
-  redis:
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 500m
-        memory: 256Mi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 # Application Controller - sharded for multi-cluster scalability
 controller:
-  replicas: 2
-  env:
-    - name: ARGOCD_CONTROLLER_SHARDING_ALGORITHM
-      value: consistent-hashing
+  replicas: 1
   resources:
     requests:
       cpu: 500m
@@ -38,7 +37,7 @@ controller:
 
 # ArgoCD Server
 server:
-  replicas: 2
+  replicas: 1
   resources:
     requests:
       cpu: 100m
@@ -60,7 +59,7 @@ server:
 
 # Repo Server
 repoServer:
-  replicas: 2
+  replicas: 1
   resources:
     requests:
       cpu: 200m
@@ -75,7 +74,7 @@ repoServer:
 
 # ApplicationSet Controller
 applicationSet:
-  replicas: 2
+  replicas: 1
   resources:
     requests:
       cpu: 100m
